@@ -1,65 +1,35 @@
-# values.yaml — параметры развёртывания single-инстанса ClickHouse через StatefulSet
-
-# Параметры образа ClickHouse
 clickhouse:
   image:
-    # Официальный образ ClickHouse
     repository: clickhouse/clickhouse-server
-    # Тег (версия ClickHouse) — можно переопределить флагом --set clickhouse.image.tag=...
     tag: "24.1.1-alpine"
-    # Политика скачивания образа
     pullPolicy: IfNotPresent
 
-# Количество реплик StatefulSet
-# Для тестового задания и single-инсталляции — 1
 replicaCount: 1
 
-# Стратегия обновления StatefulSet
 updateStrategy:
-  # Допустимые значения: RollingUpdate или OnDelete
-  # RollingUpdate — по очереди перезапускает Pod при изменении шаблона
-  # OnDelete — Pod обновится только если его удалить руками
   type: RollingUpdate
-  # partition контролирует, с какого ordinal начинать обновление Pod
-  # 0 — обновлять все Pod (clickhouse-0, clickhouse-1, ...)
-  # >0 — можно использовать для canary-обновлений
-  partition: 0
 
-# Ресурсы контейнера ClickHouse (рекомендуется настраивать под кластер)
 resources:
   requests:
-    cpu: 100m        # минимально гарантированный CPU
-    memory: 512Mi    # минимально гарантированная память
+    cpu: 100m
+    memory: 512Mi
   limits:
-    cpu: 2000m       # максимальный CPU (2 vCPU)
-    memory: 2Gi      # максимальная память
+    cpu: 2000m
+    memory: 2Gi
 
-# Параметры хранилища (PVC через volumeClaimTemplates в StatefulSet)
 storage:
-  size: 10Gi              # размер диска для данных ClickHouse
-  storageClassName: standard  # имя StorageClass в кластере
+  size: 10Gi
+  storageClassName: standard
 
-# Service для доступа к ClickHouse
 service:
-  # Тип Service: ClusterIP (внутри кластера), NodePort или LoadBalancer
   type: ClusterIP
-  # HTTP интерфейс ClickHouse (обычно 8123)
   httpPort: 8123
-  # Native протокол ClickHouse (обычно 9000)
   nativePort: 9000
 
-# Размещение Pod по нодам (опционально)
-# Можно оставить пустым для тестового кластера
 nodeSelector: {}
-
-# Толерации для работы на нодах с taints (опционально)
 tolerations: []
-
-# Affinity/anti-affinity для управления распределением Pod (опционально)
 affinity: {}
 
-# Список пользователей ClickHouse
-# На основе этого списка генерируется users.xml в ConfigMap
 users:
   - name: default
     password: "changeme123"
@@ -67,19 +37,3 @@ users:
   - name: app_user
     password: "app_secure_password_456"
     quota: "default"
-  - name: monitor_user
-    password: "monitor_pass_789"
-    quota: "default"
-
-# Базовые настройки ClickHouse, которые подставляются в users.xml и другие конфиги
-clickhouseConfig:
-  maxConnections: 4096          # максимум одновременных соединений
-  maxConcurrentQueries: 100     # максимум одновременных запросов
-  logPath: /var/log/clickhouse-server/
-
-# Настройки health checks для контейнера
-healthcheck:
-  initialDelaySeconds: 30   # задержка перед первой проверкой
-  periodSeconds: 10         # периодичность проверок
-  timeoutSeconds: 5         # таймаут одной проверки
-  failureThreshold: 3       # сколько провалов подряд считать критом
