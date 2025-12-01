@@ -1,0 +1,57 @@
+# templates/configmap-users.yaml — ConfigMap с конфигурацией пользователей ClickHouse
+# ConfigMap хранит неконфиденциальные данные конфигурации в формате ключ-значение
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "clickhouse.fullname" . }}-users-config
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+data:
+  # Файл users.xml — конфигурация пользователей ClickHouse
+  # Этот файл монтируется в /etc/clickhouse-server/users.d/ и загружается ClickHouse
+  users.xml: |
+    <?xml version="1.0"?>
+    lickhouse>
+      <!-- Профиль default — набор настроек для пользователей -->
+      <profiles>
+        <default>
+          <!-- Максимальное количество одновременных запросов от одного пользователя -->
+          <max_concurrent_queries>{{ .Values.clickhouseConfig.maxConcurrentQueries }}</max_concurrent_queries>
+          <!-- Максимальное количество блоков в памяти во время выполнения запроса -->
+          <max_memory_usage>10000000000</max_memory_usage>
+        </default>
+      </profiles>
+
+      <!-- Квоты — ограничения на использование ресурсов -->
+      <quotas>
+        <default>
+          <!-- Интервал времени для квоты (в секундах) -->
+          <interval_duration>3600</interval_duration>
+          <!-- Максимальное количество запросов в интервал -->
+          <queries>0</queries>
+          <!-- Максимальное количество ошибок в интервал -->
+          <errors>0</errors>
+        </default>
+      </quotas>
+
+      <!-- Пользователи ClickHouse -->
+      <users>
+        {{- range .Values.users }}
+        <!-- Пользователь {{ .name }} -->
+        <{{ .name }}>
+          <!-- Пароль пользователя (берётся из Secret, который монтируется отдельно) -->
+          <password_sha256_hex from_env="CH_PASSWORD_{{ .name | upper }}_HEX" />
+          <!-- Профиль ограничений и настроек для пользователя -->
+          <profile>default</profile>
+          <!-- Квота для пользователя -->
+          <quota>{{ .quota }}</quota>
+          <!-- Разрешённые сети для подключения (0.0.0.0/0 — все сети) -->
+          <networks>
+            <ip>::/0</ip>
+            <ip>0.0.0.0/0</ip>
+          </networks>
+        </{{ .name }}>
+        {{- end }}
+      </users>
+    </clickhouse>
