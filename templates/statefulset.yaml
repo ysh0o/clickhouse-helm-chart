@@ -1,0 +1,146 @@
+# templates/statefulset.yaml — Kubernetes StatefulSet для запуска ClickHouse
+# StatefulSet гарантирует стабильные имена Pod (clickhouse-0, clickhouse-1, ...) и стабильные PVC
+# Рекомендуется для любых stateful-приложений, включая базы данных вроде ClickHouse
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  # Имя StatefulSet и префикс для Pod (например, <release>-clickhouse-0)
+  name: {{ include "clickhouse.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+spec:
+  # Обязательное поле для StatefulSet — имя Service, через который будут резолвиться Pod
+  # Должно совпадать с metadata.name у Service (templates/service.yaml)
+  serviceName: {{ include "clickhouse.fullname" . }}
+
+  # Количество реплик (для single-инсталляции достаточно 1)
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    # Selector для выбора Pod, управляемых этим StatefulSet
+    matchLabels:
+      {{- include "clickhouse.selectorLabels" . | nindent 6 }}
+
+  # Стратегия обновления Pod (как обновлять версию ClickHouse)
+  updateStrategy:
+    # RollingUpdate — по очереди перезапускает Pod, сохраняя порядок
+    # OnDelete — Pod обновляются только если их удалить вручную
+    type: {{ .Values.updateStrategy.type }}
+    {{- if eq .Values.updateStrategy.type "RollingUpdate" }}
+    rollingUpdate:
+      # partition: N — обновлять Pod с ordinal >= N
+      # 0 — обновлять все Pod (clickhouse-0, clickhouse-1, ...)
+      partition: {{ .Values.updateStrategy.partition }}
+    {{- end }}
+
+  # Шаблон Pod, которые будет создавать StatefulSet
+  template:
+    metadata:
+      annotations:
+        # checksum/config — хеш ConfigMap с пользователями; при изменении конфигурации Pod будет перезапущен
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-users.yaml") . | sha256sum }}
+      labels:
+        {{- include "clickhouse.selectorLabels" . | nindent 8 }}
+    spec:
+      # Основной контейнер ClickHouse
+      containers:
+        - name: clickhouse
+          # Образ ClickHouse: repository:tag берётся из values.yaml
+          image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
+          imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+
+          # Открытые порты контейнера (HTTP и native протокол)
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.httpPort }}
+              protocol: TCP
+            - name: native
+              containerPort: {{ .Values.service.nativePort }}
+              protocol: TCP
+
+          # Ресурсы контейнера (requests/limits задаются в values.yaml)
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          # Переменные окружения контейнера (можно дополнить при необходимости)
+          env:
+            - name: LOG_LEVEL
+              value: "information"
+
+          # Монтирование томов внутрь контейнера
+          volumeMounts:
+            # Конфиг с пользователями ClickHouse (users.xml из ConfigMap)
+            - name: users-config
+              mountPath: /etc/clickhouse-server/users.d/
+              readOnly: true
+            # Данные ClickHouse (том из volumeClaimTemplates ниже)
+            - name: data
+              mountPath: /var/lib/clickhouse/
+
+          # Проверка готовности (readiness): когда Pod можно пускать в прод/принимать трафик
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: {{ .Values.healthcheck.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthcheck.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthcheck.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthcheck.failureThreshold }}
+
+          # Проверка живости (liveness): когда Pod нужно перезапустить
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            # Даём чуть больше времени на старт, чем readiness
+            initialDelaySeconds: {{ add .Values.healthcheck.initialDelaySeconds 10 }}
+            periodSeconds: {{ .Values.healthcheck.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthcheck.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthcheck.failureThreshold }}
+
+      # Общие Volumes (не-PVC), которые монтируются в Pod
+      volumes:
+        # ConfigMap с конфигурацией пользователей ClickHouse (users.xml)
+        - name: users-config
+          configMap:
+            name: {{ include "clickhouse.fullname" . }}-users-config
+
+      # Опциональные ограничения по размещению Pod
+
+      # Привязка Pod к определённым нодам по меткам
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      # Толерации для нод с taints (например, dedicated-нод для БД)
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      # Affinity/anti-affinity правила для распределения Pod по нодам
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+  # Шаблон PVC, которые будут автоматически создаваться для каждого Pod
+  # Для replicas: 1 будет 1 PVC: <release>-clickhouse-data-clickhouse-0
+  volumeClaimTemplates:
+    - metadata:
+        # Это имя далее используется в volumeMounts как "data"
+        name: data
+        labels:
+          {{- include "clickhouse.labels" . | nindent 10 }}
+      spec:
+        # Режим доступа: ReadWriteOnce — том может монтироваться на одну ноду
+        accessModes:
+          - ReadWriteOnce
+        # Класс хранения (StorageClass) должен существовать в кластере
+        storageClassName: {{ .Values.storage.storageClassName }}
+        resources:
+          requests:
+            # Размер хранилища (например, 10Gi), задаётся в values.yaml
+            storage: {{ .Values.storage.size }}
