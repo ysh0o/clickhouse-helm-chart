@@ -6,6 +6,13 @@ clickhouse:
 
 replicaCount: 1
 
+healthcheck:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+
 clickhouseConfig:
   maxConnections: 4096
   maxConcurrentQueries: 100
