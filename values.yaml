@@ -6,6 +6,12 @@ clickhouse:
 
 replicaCount: 1
 
+clickhouseConfig:
+  maxConnections: 4096
+  maxConcurrentQueries: 100
+  logPath: /var/log/clickhouse-server/
+
+
 updateStrategy:
   type: RollingUpdate
 
