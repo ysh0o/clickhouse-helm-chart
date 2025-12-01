@@ -12,7 +12,7 @@ data:
   # Этот файл монтируется в /etc/clickhouse-server/users.d/ и загружается ClickHouse
   users.xml: |
     <?xml version="1.0"?>
-    lickhouse>
+   <clickhouse>
       <!-- Профиль default — набор настроек для пользователей -->
       <profiles>
         <default>
