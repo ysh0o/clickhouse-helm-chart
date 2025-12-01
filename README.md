@@ -270,8 +270,3 @@ curl -u admin:admin_secure_123 http://localhost:8123/ping
 
 
 
-
-.kube/
-
-# Логи
-*.log
