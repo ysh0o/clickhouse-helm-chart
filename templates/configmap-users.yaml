@@ -12,7 +12,7 @@ data:
   # Этот файл монтируется в /etc/clickhouse-server/users.d/ и загружается ClickHouse
   users.xml: |
     <?xml version="1.0"?>
-   <clickhouse>
+    <clickhouse>
       <!-- Профиль default — набор настроек для пользователей -->
       <profiles>
         <default>
@@ -45,7 +45,7 @@ data:
           <!-- Профиль ограничений и настроек для пользователя -->
           <profile>default</profile>
           <!-- Квота для пользователя -->
-          <quota>{{ .quota }}</quota>
+          <quota>default</quota>
           <!-- Разрешённые сети для подключения (0.0.0.0/0 — все сети) -->
           <networks>
             <ip>::/0</ip>
