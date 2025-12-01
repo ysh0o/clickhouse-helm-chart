@@ -1,0 +1,29 @@
+# templates/service.yaml — Kubernetes Service для доступа к ClickHouse
+# Service предоставляет сетевую абстракцию для доступа к Pod
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "clickhouse.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+spec:
+  # Тип Service (ClusterIP — доступ только внутри кластера)
+  type: {{ .Values.service.type }}
+  # Selector — выбор Pod, трафик которых будет маршрутизироваться через этот Service
+  selector:
+    {{- include "clickhouse.selectorLabels" . | nindent 4 }}
+  ports:
+  # Порт HTTP интерфейса ClickHouse (для веб-интерфейса и HTTP API)
+  - name: http
+    # Порт на Service (доступен через Service DNS)
+    port: {{ .Values.service.httpPort }}
+    # Порт на Pod (containerPort из Deployment)
+    targetPort: http
+    # Протокол (TCP для HTTP)
+    protocol: TCP
+  # Порт Native протокола ClickHouse (для native клиентов)
+  - name: native
+    port: {{ .Values.service.nativePort }}
+    targetPort: native
+    protocol: TCP
