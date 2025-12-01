@@ -1,6 +1,6 @@
 # ClickHouse Helm Chart
 
-Minimalistic Helm chart для развёртывания single-инсталляции ClickHouse в Kubernetes.
+Helm chart для развёртывания single-инсталляции ClickHouse в Kubernetes.
 
 ## Описание
 
