@@ -1,90 +1,85 @@
-# values.yaml — параметры развёртывания ClickHouse
-# Все значения здесь могут быть переопределены через helm install --set или через отдельный values-файл
+# values.yaml — параметры развёртывания single-инстанса ClickHouse через StatefulSet
 
 # Параметры образа ClickHouse
 clickhouse:
   image:
-    # Репозиторий образа ClickHouse (официальный образ с Docker Hub)
+    # Официальный образ ClickHouse
     repository: clickhouse/clickhouse-server
-    # Тег образа (версия ClickHouse)
+    # Тег (версия ClickHouse) — можно переопределить флагом --set clickhouse.image.tag=...
     tag: "24.1.1-alpine"
-    # Политика загрузки образа
+    # Политика скачивания образа
     pullPolicy: IfNotPresent
 
-# Параметры Deployment
+# Количество реплик StatefulSet
+# Для тестового задания и single-инсталляции — 1
 replicaCount: 1
 
-# Ресурсы контейнера ClickHouse (запросы и лимиты)
+# Стратегия обновления StatefulSet
+updateStrategy:
+  # Допустимые значения: RollingUpdate или OnDelete
+  # RollingUpdate — по очереди перезапускает Pod при изменении шаблона
+  # OnDelete — Pod обновится только если его удалить руками
+  type: RollingUpdate
+  # partition контролирует, с какого ordinal начинать обновление Pod
+  # 0 — обновлять все Pod (clickhouse-0, clickhouse-1, ...)
+  # >0 — можно использовать для canary-обновлений
+  partition: 0
+
+# Ресурсы контейнера ClickHouse (рекомендуется настраивать под кластер)
 resources:
   requests:
-    # CPU запрашиваемый при запуске контейнера
-    cpu: 100m
-    # Память запрашиваемая при запуске контейнера
-    memory: 512Mi
+    cpu: 100m        # минимально гарантированный CPU
+    memory: 512Mi    # минимально гарантированная память
   limits:
-    # CPU максимальный лимит для контейнера
-    cpu: 2000m
-    # Память максимальный лимит для контейнера
-    memory: 2Gi
+    cpu: 2000m       # максимальный CPU (2 vCPU)
+    memory: 2Gi      # максимальная память
 
-# Параметры хранилища
+# Параметры хранилища (PVC через volumeClaimTemplates в StatefulSet)
 storage:
-  # Размер PersistentVolumeClaim для данных ClickHouse
-  size: 10Gi
-  # Класс хранилища (должен существовать в кластере K8s)
-  storageClassName: standard
+  size: 10Gi              # размер диска для данных ClickHouse
+  storageClassName: standard  # имя StorageClass в кластере
 
-# Параметры Service для доступа к ClickHouse
+# Service для доступа к ClickHouse
 service:
-  # Тип Service (ClusterIP для внутреннего доступа, LoadBalancer/NodePort для внешнего)
+  # Тип Service: ClusterIP (внутри кластера), NodePort или LoadBalancer
   type: ClusterIP
-  # Порт HTTP интерфейса ClickHouse (для запросов через HTTP)
+  # HTTP интерфейс ClickHouse (обычно 8123)
   httpPort: 8123
-  # Порт native протокола ClickHouse (для native клиентов, более быстрый)
+  # Native протокол ClickHouse (обычно 9000)
   nativePort: 9000
 
-# Параметры узла (nodeSelector для привязки Pod к конкретному узлу)
+# Размещение Pod по нодам (опционально)
+# Можно оставить пустым для тестового кластера
 nodeSelector: {}
 
-# Толерации для развёртывания на узлах с taints
+# Толерации для работы на нодах с taints (опционально)
 tolerations: []
 
-# Affinity-правила для распределения Pod
+# Affinity/anti-affinity для управления распределением Pod (опционально)
 affinity: {}
 
-# Параметры пользователей ClickHouse
-# Список пользователей с паролями для доступа к БД
+# Список пользователей ClickHouse
+# На основе этого списка генерируется users.xml в ConfigMap
 users:
-  # Пользователь default — встроенный пользователь ClickHouse
   - name: default
     password: "changeme123"
-    # Квота на количество запросов (0 = без ограничений)
     quota: "default"
-  # Дополнительный пользователь для приложения
   - name: app_user
     password: "app_secure_password_456"
     quota: "default"
-  # Пользователь для мониторинга
   - name: monitor_user
     password: "monitor_pass_789"
     quota: "default"
 
-# Параметры конфигурации ClickHouse
+# Базовые настройки ClickHouse, которые подставляются в users.xml и другие конфиги
 clickhouseConfig:
-  # Максимальное количество одновременных соединений
-  maxConnections: 4096
-  # Максимальное количество одновременных запросов
-  maxConcurrentQueries: 100
-  # Путь для логов в контейнере
+  maxConnections: 4096          # максимум одновременных соединений
+  maxConcurrentQueries: 100     # максимум одновременных запросов
   logPath: /var/log/clickhouse-server/
 
-# Параметры для проверки доступности Pod (liveness и readiness probes)
+# Настройки health checks для контейнера
 healthcheck:
-  # Начальная задержка перед первой проверкой (в секундах)
-  initialDelaySeconds: 30
-  # Период между проверками (в секундах)
-  periodSeconds: 10
-  # Timeout одной проверки (в секундах)
-  timeoutSeconds: 5
-  # Количество неудачных проверок, после которого Pod рестартнёт
-  failureThreshold: 3
+  initialDelaySeconds: 30   # задержка перед первой проверкой
+  periodSeconds: 10         # периодичность проверок
+  timeoutSeconds: 5         # таймаут одной проверки
+  failureThreshold: 3       # сколько провалов подряд считать критом
