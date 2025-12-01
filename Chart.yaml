@@ -1,7 +1,7 @@
 # Chart.yaml — метаданные Helm-чарта
 apiVersion: v2
 name: clickhouse
-description: Helm chart for deploying a single ClickHouse instance in Kubernetes
+description: Single ClickHouse instance on Kubernetes
 type: application
 version: 0.1.0
 appVersion: "24.1"
@@ -10,5 +10,5 @@ keywords:
   - olap
   - database
 maintainers:
-  - name: DevOps Team
+  - name: DevOps
     email: devops@example.com
